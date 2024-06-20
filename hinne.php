@@ -1,131 +1,166 @@
-<?php 
-include("config.php"); 
-session_start(); 
+<?php
+include("config.php");
+session_start();
+
+if (isset($_GET['asukoht'])) {
+    $selectedasukohtId = $_GET['asukoht'];
+    $stmt = $yhendus->prepare("SELECT nimi FROM asukohad WHERE id = ?");
+    $stmt->bind_param("i", $selectedasukohtId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+
+    if (!$row) {
+        header("Location: hindamine.php");
+        exit;
+    }
+} else {
+    header("Location: hindamine.php");
+    exit;
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="et">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kert</title>
+    <title>Lisa hinnang</title>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
     <style>
-        body {
+        .body {
             background-color: #f8f9fa;
-            color: #343a40;
         }
-        .container {
-            margin-top: 40px;
-        }
-        h1 {
-            font-size: 24px;
-            color: #007bff;
-        }
-        .table th, .table td {
-            padding: 8px;
-        }
-        .table th {
-            background-color: #007bff;
-            color: #fff;
-        }
-        .table-striped tbody tr:nth-of-type(odd) {
-            background-color: #f9f9f9;
-        }
-        .pagination {
+        .star-rating {
+            display: flex;
+            flex-direction: row-reverse;
             justify-content: center;
-            margin-top: 20px;
+        }
+        .star-rating input[type="radio"] {
+            display: none;
+        }
+        .star-rating label {
+            font-size: 2rem;
+            color: gray;
+            cursor: pointer;
+        }
+        .star-rating input[type="radio"]:checked ~ label,
+        .star-rating label:hover,
+        .star-rating label:hover ~ label {
+            color: orange;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header class="my-4">
-            <h1>kert.ee</h1>
-        </header>
-        
-        <section>
-            <form method="get" class="row g-3">
-                <div class="col-auto">
-                    <input type="text" name="otsi" id="otsi" class="form-control" placeholder="Otsi asukohta">
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary mb-3">Otsi</button>
-                </div>
-            </form>
-        </section>
+    <div class="container mt-5">
+        <div class="card shadow">
+            <div class="card-body">
+            <h1 class="mt-4 text-center"><?php echo htmlspecialchars($row['nimi']); ?></h1>
+                <hr>
+                <button class="btn btn-primary mb-3" onclick="window.location.href='index.php'">Back</button>
+                <form method="post">
+                    <div class="mb-3">
+                        <label for="nimi" class="form-label">Name:</label>
+                        <input type="text" name="nimi" id="nimi" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="comment" class="form-label">Comment:</label>
+                        <textarea name="comment" id="comment" rows="4" class="form-control" required></textarea>
+                    </div>
+                    <label>Hinnang:</label>
+                    <div class="star-rating mb-3">
+                        <?php for ($i = 10; $i >= 1; $i--): ?>
+                            <input type="radio" name="hinnang" id="hinnang<?php echo $i; ?>" value="<?php echo $i; ?>" required>
+                            <label for="hinnang<?php echo $i; ?>"><i class="fa fa-star"></i></label>
+                        <?php endfor; ?>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <input type="submit" class="btn btn-primary" value="hinda">
+                    </div>
+                </form>
 
-        <section class="table-container mt-4">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Asukoht</th>
-                        <th>Tänav</th>
-                        <th>Keskmine hinne</th>
-                        <th>Hindeid</th>
-                    </tr>
-                </thead>
-                <tbody>
                 <?php
-                    $itemsPerPage = 10;
-                    $page = isset($_GET['leht']) ? (int)$_GET['leht'] : 1;
-                    $offset = ($page - 1) * $itemsPerPage;
-                    $sortColumn = isset($_GET['sort']) ? $_GET['sort'] : 'nimi';
-                    $sortOrder = isset($_GET['order']) ? $_GET['order'] : 'asc';
-                    $searchTerm = isset($_GET['otsi']) ? $_GET['otsi'] : '';
-                    $searchQuery = $searchTerm ? "WHERE nimi LIKE '%$searchTerm%'" : '';
+                    if (!empty($_POST['nimi']) && !empty($_POST['comment']) && !empty($_POST['hinnang'])) {
+                        $nimi = $_POST['nimi'];
+                        $comment = $_POST['comment'];
+                        $hinnang = $_POST['hinnang'];
 
-                    $queryTotalItems = "SELECT COUNT(*) as total FROM asukohad $searchQuery";
-                    $totalItemsResult = $yhendus->query($queryTotalItems);
-                    $totalItems = $totalItemsResult->fetch_assoc()['total'];
-                    $totalPages = ceil($totalItems / $itemsPerPage);
+                        $stmt = $yhendus->prepare("INSERT INTO hinnangud (nimi, comment, hinnang, asukohad_id) VALUES (?, ?, ?, ?)");
+                        $stmt->bind_param("ssii", $nimi, $comment, $hinnang, $selectedasukohtId);
 
-                    $queryLocations = "SELECT * FROM asukohad $searchQuery ORDER BY $sortColumn $sortOrder LIMIT $offset, $itemsPerPage";
-                    $result = $yhendus->query($queryLocations);
-
-                    if ($result->num_rows > 0) {
-                        while ($row = $result->fetch_assoc()) {
-                            $locationName = $row['nimi'];
-                            $locationId = $row['id'];
-
-                            $queryRatingsCount = "SELECT COUNT(hinnang) AS ratings_count FROM hinnangud WHERE asukohad_id = '$locationId'";
-                            $ratingsResult = $yhendus->query($queryRatingsCount);
-                            $ratingsCount = $ratingsResult->fetch_assoc()['ratings_count'];
-
-                            $queryAverageRating = "SELECT AVG(hinnang) AS average_rating FROM hinnangud WHERE asukohad_id = '$locationId'";
-                            $averageRatingResult = $yhendus->query($queryAverageRating);
-                            $averageRating = $averageRatingResult->fetch_assoc()['average_rating'];
-                            $averageRatingRounded = round($averageRating, 1);
-
-                            $updateQuery = "UPDATE asukohad SET kesk_hinne = '$averageRatingRounded', hinnete_arv = '$ratingsCount' WHERE id = '$locationId'";
-                            $yhendus->query($updateQuery);
-                            ?>
-                            <tr>
-                                <td><a href="hinne.php?asukoht=<?php echo urlencode($locationId); ?>"><?php echo htmlspecialchars($row["nimi"]); ?></a></td>
-                                <td><?php echo htmlspecialchars($row["asukoht"]); ?></td>
-                                <td><?php echo htmlspecialchars($averageRatingRounded); ?></td>
-                                <td><?php echo htmlspecialchars($ratingsCount); ?></td>
-                            </tr>
-                            <?php
+                        if ($stmt->execute()) {
+                            echo '<div class="alert alert-success mt-3" role="alert">Hinne on edukalt lisatud.</div>'; 
+                            die();
+                            header("Location: index.php");
+                        } else {
+                            echo '<div class="alert alert-danger mt-3" role="alert">Error: ' . $stmt->error . '</div>';
                         }
                     }
                 ?>
-                </tbody>
-            </table>
-            <nav aria-label="Page navigation">
-                <ul class="pagination">
-                    <?php if ($page > 1): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?leht=<?php echo $page - 1; ?>&otsi=<?php echo urlencode($searchTerm); ?>">&lt; Eelmine</a>
-                        </li>
-                    <?php endif; ?>
-                    <?php if ($page < $totalPages): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?leht=<?php echo $page + 1; ?>&otsi=<?php echo urlencode($searchTerm); ?>">Järgmine &gt;</a>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </nav>
-        </section>
+
+                <hr>
+                <h2 class="mt-4 text-center">Teised Hinded</h2>
+                <?php
+                $stmt = $yhendus->prepare("SELECT * FROM hinnangud WHERE asukohad_id = ?");
+                $stmt->bind_param("i", $selectedasukohtId);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        echo '<div class="review-card card">';
+                        echo '<div class="card-body">';
+                        echo '<h5 class="card-title">' . htmlspecialchars($row["nimi"]) . ' - ' . htmlspecialchars($row["hinnang"]) . '/10</h5>';
+                        echo '<p class="card-text">' . htmlspecialchars($row["comment"]) . '</p>';
+                        echo '</div>';
+                        echo '</div>';
+                    }
+                } else {
+                    echo '<div class="alert alert-info" role="alert">Hinnanguid ei leitud.</div>';
+                }
+                ?>
+
+                <?php $yhendus->close(); ?>
+            </div>
+        </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const stars = document.querySelectorAll('.star-rating label');
+
+            stars.forEach((star, index) => {
+                star.addEventListener('mouseover', () => {
+                    stars.forEach((s, i) => {
+                        s.style.color = i <= index ? 'orange' : 'gray';
+                    });
+                });
+
+                star.addEventListener('mouseout', () => {
+                    const checkedStar = document.querySelector('.star-rating input:checked');
+                    stars.forEach((s, i) => {
+                        s.style.color = checkedStar && i < checkedStar.value ? 'orange' : 'gray';
+                    });
+                });
+
+                star.addEventListener('click', () => {
+                    const starInput = document.getElementById(`hinnang${index + 1}`);
+                    starInput.checked = true;
+                    starInput.dispatchEvent(new Event('change'));
+                });
+            });
+
+            document.querySelectorAll('.star-rating input').forEach(input => {
+                input.addEventListener('change', () => {
+                    stars.forEach((s, i) => {
+                        s.style.color = i < input.value ? 'orange' : 'gray';
+                    });
+                });
+            });
+        });
+    </script>
 </body>
 </html>
